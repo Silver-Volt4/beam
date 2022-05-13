@@ -107,6 +107,6 @@ class ShadowOfMessage:
             "type": "shadow",
             "shadow": {
                 "to": self.to.name,
-                "content": self.content
+                "content": self.content.repr()
             }
         }

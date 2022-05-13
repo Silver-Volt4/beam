@@ -70,7 +70,7 @@ class Player:
         for ms in self.messages:
             if looped_real_messages == expected_next:
                 break
-            if not ms.get("type", "") == "shadow":
+            if not ms is messages.ShadowOfMessage:
                 looped_real_messages += 1
             caret += 1
 
