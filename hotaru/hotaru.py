@@ -13,7 +13,6 @@ import time
 
 HT_VERSION = "v0"
 
-
 class Hotaru(tornado.web.Application):
     """
     Main object for the Tornado server.
@@ -349,10 +348,10 @@ class HotaruWebsocket(tornado.websocket.WebSocketHandler):
         # Call 1-800-REPEAT to receive a copy of all messages that have been sent to you after a specified packet!
         elif message_command == "repeat":
             print({
-                        "type": "repeated",
+                "type": "repeated",
                         "start": actual_message,
                         "repeat": player.generate_repeat(actual_message)
-                    })
+            })
             try:
                 player.client.write_message(json.dumps(
                     {
@@ -361,4 +360,4 @@ class HotaruWebsocket(tornado.websocket.WebSocketHandler):
                         "repeat": player.generate_repeat(actual_message)
                     }, ensure_ascii=False))
             except Exception as e:
-                print("it failed.",e)
+                print("it failed.", e)
