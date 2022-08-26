@@ -17,7 +17,7 @@ def main():
     app = Hotaru(
         do_inspect=ENABLE_INSPECT,
         max_servers=int(os.environ.get("MAX_SERVERS","3")),
-        max_users=int(os.environ.get("MAX_SERVERS","3"))
+        max_users=int(os.environ.get("MAX_USERS","3"))
     )
     port = os.environ.get("PORT")
     if not port:
