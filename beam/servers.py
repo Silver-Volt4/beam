@@ -47,8 +47,6 @@ class Server(Player):
         self.client = None
 
         self.players = PlayerPool()
-        self.messages = []
-        self.messages_public = []
         self.next = 0
         self.lock = False
         self.limit = limit

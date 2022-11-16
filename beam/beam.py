@@ -13,6 +13,7 @@ import time
 
 BEAM_VERSION = "v0"
 
+
 class Beam(tornado.web.Application):
     """
     Main object for the Tornado server.
@@ -161,13 +162,12 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
     This is where actual communication happens.
     """
 
-    def check_origin(self, origin):
-        # VERY UNSAFE. This should get a tweak as soon as possible!!!
-        return True
-
-    def get_compression_options(self):
-        # Non-None enables compression with default options
-        return {}
+    def __init__(self, application, request, **kwargs) -> None:
+        super().__init__(application, request, **kwargs)
+        self.server = None
+        self.player_name = None
+        self.player = None
+        self.su = None
 
     def xtract_args(self):
         code = self.get_argument("code")
@@ -184,42 +184,49 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
         return (server, player_name, player, su)
 
+    def check_origin(self, origin):
+        # VERY UNSAFE. This should get a tweak as soon as possible!!!
+        return True
+
+    def get_compression_options(self):
+        # Non-None enables compression with default options
+        return {}
+
     def open(self, client):
         logging.debug("Handling request BeamWebsocket/" +
                       self.path_args[0])
         if not self.path_args[0] == BEAM_VERSION:
             self.close(code=exceptions.BreakingApiChange())
 
-        server, player_name, player, su = self.xtract_args()
+        self.server, self.player_name, self.player, self.su = self.xtract_args()
 
         # Check for errors in the connection and kick the client if necessary
 
-        if not server:
+        if not self.server:
             self.close(code=exceptions.ServerCodeDoesntExist())
             return
 
-        registering = player_name and not su
-        logging_in = player_name and su
-        owner_connecting = su and not player_name
+        registering = self.player_name and not self.su
+        logging_in = self.player_name and self.su
+        owner_connecting = self.su and not self.player_name
 
         if registering:
-            if server.lock:
+            if self.server.lock:
                 self.close(code=exceptions.ServerIsLocked())
 
-            elif server.players.count() == server.limit:
+            elif self.server.players.count() == self.server.limit:
                 self.close(code=exceptions.RoomLimitReached())
 
-            elif player:
+            elif self.player:
                 self.close(code=exceptions.NameIsTaken())
 
-            elif player_name == "":
+            elif self.player_name == "":
                 self.close(code=exceptions.NamePropertyIsEmpty())
 
             else:
                 # Check for spam and ban if necessary
-
                 request_time = time.time()
-                ratelimit = server.rate_limit.get_ratelimit_data(
+                ratelimit = self.server.rate_limit.get_ratelimit_data(
                     self.request.remote_ip)
 
                 if request_time > ratelimit.banned_until:
@@ -244,56 +251,50 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
                 # Add player
 
-                p = Player(player_name, self)
-                server.add_user(p)
+                p = Player(self.player_name, self)
+                self.server.add_user(p)
                 su_message = messages.Su(p.su)
                 p.write_message(su_message)
-
-                for pb in server.messages_public:
-                    p.messages.append(pb)
-                    p.next += 1
-
                 append = messages.UserAppend(p)
-                server.write_message(append)
+                self.server.write_message(append)
 
         elif logging_in:
-            if not player:
+            if not self.player:
                 self.close(code=exceptions.NameDoesntExist())
 
-            elif player.su != su:
+            elif self.player.su != self.su:
                 self.close(code=exceptions.SuCodeMismatch())
 
             # The player name exists and the code is correct
-            elif player.su == su:
+            elif self.player.su == self.su:
                 try:
-                    player.client.close(code=exceptions.Overridden())
+                    self.player.client.close(code=exceptions.Overridden())
                 except:
                     pass
-                player.client = self
+                self.player.client = self
 
-                join = messages.UserJoin(player)
-                server.write_message(join)
+                join = messages.UserJoin(self.player)
+                self.server.write_message(join)
 
         elif owner_connecting:
-            if server.su != su:
+            if self.server.su != self.su:
                 self.close(code=exceptions.SuAdminCodeMismatch())
 
             # The code checks out
             else:
                 try:
-                    server.client.close(code=exceptions.Overridden())
+                    self.server.client.close(code=exceptions.Overridden())
                 except:
                     pass
-                server.client = self
+                self.server.client = self
 
     # We notify the server owner about the disconnection
     def on_connection_close(self):
         if self.close_code:
             if self.close_code != 1000 and self.close_code < 4000:
-                server, player_name, player, su = self.xtract_args()
-                if server and player:
-                    left = messages.UserLeft(player)
-                    server.write_message(left)
+                if self.server and self.player:
+                    left = messages.UserLeft(self.player)
+                    self.server.write_message(left)
 
     # Responsible for delivering messages
     def _send_message(self, server, player, actual_message):
@@ -309,55 +310,33 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
         if actual_message["to"] == 2:
             player.sends_message(server, msg, True)
-            server.messages_public.append(msg)
 
     # Fires when a WS packet is received
     def on_message(self, message, *args):
+        command = ord(message[0])
+        if len(message) > 1:
+            data = json.loads(message[1:])
 
-        # We discard any packet with a length less than or equal to 1.
-        # This is for Heroku, it likes to disconnect those that it deems inactive.
-        # I usually counter this by sending a whitespace every 5 seconds or so
-        if len(message) <= 1:
+        # Discard packet.
+        if command == 32:
             return
+        
+        # Send a message.
+        if command == 33:
+            self._send_message(self.server, self.player, data)
 
-        server, player_name, player, su = self.xtract_args()
+        # Send more messages at once.
+        elif command == 34:
+            for ms in data:
+                self._send_message(self.server, self.player, ms)
 
-        message_command = message.split(" ")[0]
-        actual_message = json.loads(" ".join(message.split(" ")[1:]))
 
         # player.name is a 1 only if it's sent by the server owner,
         # see servers.py. This is for legacy reasons and how Beam was implemented
         # before the rewrite and open-sourcing.
-        if message_command == "lock" and player.name == 1:
-            server.lock = True
+        if command == 35 and self.player.name == 1:
+            self.server.lock = True
 
-        if message_command == "unlock" and player.name == 1:
-            server.lock = False
+        if command == 36 and self.player.name == 1:
+            self.server.lock = False
 
-        # Send a message.
-        if message_command == "chat":
-            self._send_message(server, player, actual_message)
-
-        # Identical behavior to sending multiple "chat" commands with different contents.
-        # Instead, the content is an array of what we would have sent individually
-        elif message_command == "chats":
-            for ms in actual_message:
-                self._send_message(server, player, ms)
-
-        # Have you lost a packet? Does your "q" number not match? Fear not, for we have a solution!
-        # Call 1-800-REPEAT to receive a copy of all messages that have been sent to you after a specified packet!
-        elif message_command == "repeat":
-            print({
-                "type": "repeated",
-                        "start": actual_message,
-                        "repeat": player.generate_repeat(actual_message)
-            })
-            try:
-                player.client.write_message(json.dumps(
-                    {
-                        "type": "repeated",
-                        "start": actual_message,
-                        "repeat": player.generate_repeat(actual_message)
-                    }, ensure_ascii=False))
-            except Exception as e:
-                print("it failed.", e)

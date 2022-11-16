@@ -86,27 +86,3 @@ class Su:
             "type": "su",
             "su": self.su
         }
-
-
-class ShadowOfMessage:
-    """
-    This type of message is never sent directly, rather, it's a part
-    of a "repeat" packet. They are messages sent by a player to Beam.
-
-    Example usage would be in a chat app, where normal messages
-    were sent by other players, and shadows were sent by you.
-    One could rebuild the chat log like this.
-    """
-
-    def __init__(self, to, content):
-        self.to = to
-        self.content = content
-
-    def repr(self):
-        return {
-            "type": "shadow",
-            "shadow": {
-                "to": self.to.name,
-                "content": self.content.repr()
-            }
-        }
