@@ -6,6 +6,7 @@ import tornado.websocket
 from beam import messages, ratelimiting, exceptions
 from beam.servers import Server, ServerPool
 from beam.players import Player
+from beam.exceptions import BASE
 
 import logging
 import json
@@ -299,7 +300,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
     # We notify the server owner about the disconnection
     def on_connection_close(self):
-        if self.close_code or 0 < 4000:
+        if self.close_code or 0 < BASE:
             if self.server and isinstance(self.player, Player):
                 self.server.write_message(
                     messages.UserDisconnected(self.player)

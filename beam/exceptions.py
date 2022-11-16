@@ -4,61 +4,63 @@ Because .close(code=ServerCodeDoesntExist()) makes more sense than .close(code=4
 """
 
 import logging
+BASE = 4000
 
 
 def ServerCodeDoesntExist():
     logging.debug(f"exception: ServerCodeDoesntExist")
-    return 4000 + 0
+    return BASE + 0
 
 
 def ServerIsLocked():
     logging.debug(f"exception: ServerIsLocked")
-    return 4000 + 1
+    return BASE + 1
 
 
 def NameIsTaken():  # This one happens when you're trying to register and the name is taken
     logging.debug(f"exception: NameIsTaken")
-    return 4000 + 2
+    return BASE + 2
 
 
 def NameDoesntExist():  # This one happens when you supply a token code in the login
     logging.debug(f"exception: # NameDoesntExist")
-    return 4000 + 3
+    return BASE + 3
 
 
 def SuCodeMismatch():
     logging.debug(f"exception: SuCodeMismatch")
-    return 4000 + 4
+    return BASE + 4
 
 
 def SuAdminCodeMismatch():
     logging.debug(f"exception: SuAdminCodeMismatch")
-    return 4000 + 5
+    return BASE + 5
 
 
 def NamePropertyIsEmpty():
     logging.debug(f"exception: NamePropertyIsEmpty")
-    return 4000 + 6
+    return BASE + 6
 
 
 def RoomLimitReached():
     logging.debug(f"exception: RoomLimitReached")
-    return 4000 + 7
+    return BASE + 7
 
 
 def Overridden():
     logging.debug(f"exception: Overridden")
-    return 4000 + 10
+    return BASE + 10
 
 
 def BreakingApiChange():
     logging.debug(f"exception: BreakingApiChange")
-    return 4000 + 19
+    return BASE + 19
 
 
 def ServerClosing():
     logging.debug(f"exception: ServerClosing")
-    return 4000 + 20
+    return BASE + 20
+
 
 def BannedByRateLimit():
-    return 4000 + 30
+    return BASE + 30
