@@ -1,88 +1,68 @@
+from typing import List
 from beam.players import Player
 
-"""
-Holder classes for all message types we currently support.
-"""
-
-
-class RawMessage:
+def Message(from_: Player, data):
     """
-    Class for user-sent messages, these are always
+    For user-sent messages, these are always
     from someone else, not Beam itself
     """
 
-    def __init__(self, from_: Player, message_content):
-        self.from_ = from_
-        self.message_content = message_content
+    return {
+        "type": "msg",
+        "from": from_.name,
+        "data": data
+    }
 
-    def repr(self):
-        return {
-            "type": "msg",
-            "from": self.from_.name,
-            "am": self.message_content
-        }
+def UsersList(users: List[Player]):
+    return {
+        "type": "users",
+        "list": [u.name for u in users]
+    }
 
-
-class UserAppend:
+def UserJoin(user: Player):
     """
     Sent to the owner when a player enters the game for the first time,
     their name should be appended to some kind of dictionary
     on the server owner's end
     """
 
-    def __init__(self, user: Player):
-        self.user = user
-
-    def repr(self):
-        return {
-            "type": "userappend",
-            "user": self.user.name
-        }
+    return {
+        "type": "joined",
+        "name": user.name
+    }
 
 
-class UserJoin:
+def UserConnected(user: Player):
     """
     Sent to the owner when an already registered player joins the game back,
     presumably after being disconnected or when switching devices
     """
 
-    def __init__(self, user: Player):
-        self.user = user
-
-    def repr(self):
-        return {
-            "type": "userjoin",
-            "user": self.user.name
-        }
+    return {
+        "type": "connected",
+        "name": user.name
+    }
 
 
-class UserLeft:
+def UserDisconnected(user: Player):
     """
     Sent to the owner when an already registered player disconnects abnormally,
     presumably after network problems
     """
 
-    def __init__(self, user: Player):
-        self.user = user
-
-    def repr(self):
-        return {
-            "type": "userleft",
-            "user": self.user.name
-        }
+    return {
+        "type": "disconnected",
+        "name": user.name
+    }
 
 
-class Su:
+def Token(token: str):
     """
     Sent to every newly registered player, this code is used for
     authentication later on, for instance when reconnecting
     """
 
-    def __init__(self, su: str):
-        self.su = su
-
-    def repr(self):
-        return {
-            "type": "su",
-            "su": self.su
-        }
+    return {
+        "type": "token",
+        "token": token
+    }

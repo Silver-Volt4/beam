@@ -2,7 +2,6 @@ class JoinLimiter:
     def __init__(self):
         self.strikes = 0
         self.striking_test = 0
-
         self.banned_until = 0
 
 

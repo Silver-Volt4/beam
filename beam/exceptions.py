@@ -21,7 +21,7 @@ def NameIsTaken():  # This one happens when you're trying to register and the na
     return 4000 + 2
 
 
-def NameDoesntExist():  # This one happens when you supply a su code in the login
+def NameDoesntExist():  # This one happens when you supply a token code in the login
     logging.debug(f"exception: # NameDoesntExist")
     return 4000 + 3
 

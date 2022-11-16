@@ -1,6 +1,6 @@
 import logging
 from beam import exceptions, ratelimiting
-from beam.players import Player
+from beam.players import Player, PlayerPool
 import uuid
 import random
 import string
@@ -10,44 +10,14 @@ Classes for the servers.
 """
 
 
-class PlayerPool:
-    """
-    Holder class for a list of players connected to a server.
-    """
-
-    def __init__(self):
-        self.name = 2
-        self.players = {}
-
-    # For subscript access
-    def __setitem__(self, player_name, player):
-        self.players[player_name] = player
-
-    def __getitem__(self, player_name):
-        return self.players[player_name]
-
-    # For x in y access
-    def __contains__(self, what):
-        return what in self.players
-
-    def list(self):
-        return list(self.players.values())
-
-    def count(self):
-        return len(self.players)
-
-
 class Server(Player):
     def __init__(self, code: str, limit: int):
-        self.name = 1
-
         self.code = code
-        self.su = str(uuid.uuid4())
+        self.token = str(uuid.uuid4())
 
         self.client = None
 
         self.players = PlayerPool()
-        self.next = 0
         self.lock = False
         self.limit = limit
 

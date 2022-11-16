@@ -4,7 +4,7 @@ import tornado.web
 import tornado.websocket
 
 from beam import messages, ratelimiting, exceptions
-from beam.servers import ServerPool
+from beam.servers import Server, ServerPool
 from beam.players import Player
 
 import logging
@@ -125,14 +125,14 @@ class BeamCommands(tornado.web.RequestHandler):
 
                 server = self.application.pool.create_server(limit, prefix)
                 game_code = server.code
-                su = server.su
+                token = server.token
                 server.owner_ip = self.request.remote_ip
                 logging.info(f"Created new Server: {game_code}")
                 self.application.rate_limits.ip_own(server.owner_ip)
                 self.set_status(201)
                 self.write({
-                    "c": game_code[-4:],
-                    "su": su
+                    "code": game_code[-4:],
+                    "token": token
                 })
         else:
             self.set_status(404)
@@ -144,7 +144,7 @@ class BeamCommands(tornado.web.RequestHandler):
             server = self.application.pool.get_server_safe(
                 self.get_argument("code"))
             if server:
-                if server.su == self.get_argument("su"):
+                if server.token == self.get_argument("token"):
                     self.application.rate_limits.ip_deown(server.owner_ip)
                     server.close_server()
                     logging.info(f"Closed server: {server.code}")
@@ -167,22 +167,24 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         self.server = None
         self.player_name = None
         self.player = None
-        self.su = None
+        self.token = None
 
-    def xtract_args(self):
+    def parse_args(self):
         code = self.get_argument("code")
+        player_name = self.get_argument("name", None)
+        token = self.get_argument("token", None)
         server = self.application.pool.get_server_safe(code)
 
-        player_name = self.get_argument("name", None)
-        player = None
         if server and player_name:
             player = server.get_player_safe(player_name)
 
-        su = self.get_argument("su", None)
-        if su and not player_name:
+        if token and not player_name:
             player = server
 
-        return (server, player_name, player, su)
+        self.server = server
+        self.player_name = player_name
+        self.player = player
+        self.token = token
 
     def check_origin(self, origin):
         # VERY UNSAFE. This should get a tweak as soon as possible!!!
@@ -198,7 +200,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         if not self.path_args[0] == BEAM_VERSION:
             self.close(code=exceptions.BreakingApiChange())
 
-        self.server, self.player_name, self.player, self.su = self.xtract_args()
+        self.parse_args()
 
         # Check for errors in the connection and kick the client if necessary
 
@@ -206,9 +208,9 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
             self.close(code=exceptions.ServerCodeDoesntExist())
             return
 
-        registering = self.player_name and not self.su
-        logging_in = self.player_name and self.su
-        owner_connecting = self.su and not self.player_name
+        registering = self.player_name and not self.token
+        logging_in = self.player_name and self.token
+        owner_connecting = self.token and not self.player_name
 
         if registering:
             if self.server.lock:
@@ -252,67 +254,73 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 # Add player
 
                 p = Player(self.player_name, self)
+                self.player = p
                 self.server.add_user(p)
-                su_message = messages.Su(p.su)
-                p.write_message(su_message)
-                append = messages.UserAppend(p)
-                self.server.write_message(append)
+
+                p.write_message(
+                    messages.Token(p.token)
+                )
+                self.server.write_message(
+                    messages.UserJoin(p)
+                )
 
         elif logging_in:
             if not self.player:
                 self.close(code=exceptions.NameDoesntExist())
 
-            elif self.player.su != self.su:
+            elif self.player.token != self.token:
                 self.close(code=exceptions.SuCodeMismatch())
 
             # The player name exists and the code is correct
-            elif self.player.su == self.su:
+            elif self.player.token == self.token:
                 try:
                     self.player.client.close(code=exceptions.Overridden())
                 except:
                     pass
                 self.player.client = self
 
-                join = messages.UserJoin(self.player)
-                self.server.write_message(join)
+                self.server.write_message(
+                    messages.UserConnected(self.player)
+                )
 
         elif owner_connecting:
-            if self.server.su != self.su:
+            if self.server.token != self.token:
                 self.close(code=exceptions.SuAdminCodeMismatch())
-
-            # The code checks out
             else:
                 try:
                     self.server.client.close(code=exceptions.Overridden())
                 except:
                     pass
                 self.server.client = self
+                if self.server.players.count() > 0:
+                    self.server.write_message(
+                        messages.UsersList(self.server.players.list())
+                    )
 
     # We notify the server owner about the disconnection
     def on_connection_close(self):
-        if self.close_code:
-            if self.close_code != 1000 and self.close_code < 4000:
-                if self.server and self.player:
-                    left = messages.UserLeft(self.player)
-                    self.server.write_message(left)
+        if self.close_code or 0 < 4000:
+            if self.server and isinstance(self.player, Player):
+                self.server.write_message(
+                    messages.UserDisconnected(self.player)
+                )
 
     # Responsible for delivering messages
-    def _send_message(self, server, player, actual_message):
-        if actual_message["to"] == 1:
-            recipient = server
-        elif actual_message["to"] == 2:
-            recipient = server.players
+    def _send_message(self, data):
+        if data["to"] == 1:
+            recipient = self.server
+        elif data["to"] == 2:
+            recipient = self.server.players
         else:
-            recipient = server.get_player_safe(actual_message["to"])
+            recipient = self.server.get_player_safe(data["to"])
 
-        msg = messages.RawMessage(player, actual_message["content"])
-        player.sends_message(recipient, msg)
-
-        if actual_message["to"] == 2:
-            player.sends_message(server, msg, True)
+        self.player.sends_message(
+            recipient,
+            messages.Message(self.player, data["content"])
+        )
 
     # Fires when a WS packet is received
-    def on_message(self, message, *args):
+    def on_message(self, message):
         command = ord(message[0])
         if len(message) > 1:
             data = json.loads(message[1:])
@@ -320,23 +328,20 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         # Discard packet.
         if command == 32:
             return
-        
+
         # Send a message.
         if command == 33:
-            self._send_message(self.server, self.player, data)
+            self._send_message(data)
 
         # Send more messages at once.
         elif command == 34:
-            for ms in data:
-                self._send_message(self.server, self.player, ms)
+            for part in data:
+                self._send_message(part)
 
-
-        # player.name is a 1 only if it's sent by the server owner,
-        # see servers.py. This is for legacy reasons and how Beam was implemented
-        # before the rewrite and open-sourcing.
-        if command == 35 and self.player.name == 1:
+        # Lock the instance; ban newcomers.
+        if command == 35 and isinstance(self.player, Server):
             self.server.lock = True
 
-        if command == 36 and self.player.name == 1:
+        # Unlock the instance; allow newcomers.
+        if command == 36 and isinstance(self.player, Server):
             self.server.lock = False
-
