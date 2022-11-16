@@ -1,7 +1,3 @@
-<p align="center">
-  <img width="500px" src=".github/beam.png">
-</p>
-
 # Beam
 
 Beam is a WebSocket based server written in Python designed for turn-based games and party games.  
