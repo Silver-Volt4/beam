@@ -1,4 +1,4 @@
-from hotaru import messages
+from beam import messages
 import uuid
 import json
 

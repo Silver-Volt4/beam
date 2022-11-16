@@ -3,17 +3,17 @@ import tornado.template
 import tornado.web
 import tornado.websocket
 
-from hotaru import messages, ratelimiting, exceptions
-from hotaru.servers import ServerPool
-from hotaru.players import Player
+from beam import messages, ratelimiting, exceptions
+from beam.servers import ServerPool
+from beam.players import Player
 
 import logging
 import json
 import time
 
-HT_VERSION = "v0"
+BEAM_VERSION = "v0"
 
-class Hotaru(tornado.web.Application):
+class Beam(tornado.web.Application):
     """
     Main object for the Tornado server.
     """
@@ -31,17 +31,17 @@ class Hotaru(tornado.web.Application):
         self.BAN_FOR = kwargs.get("ban_for", 200)
 
         handlers = [
-            ("/ws/(.*)", HotaruWebsocket),
-            ("/hotaru/(.*)",   HotaruCommands)
+            ("/ws/(.*)", BeamWebsocket),
+            ("/beam/(.*)",   BeamCommands)
         ]
 
         if do_inspect:
             handlers.append(
-                ("/inspect(.*)", HotaruInspector)
+                ("/inspect(.*)", BeamInspector)
             )
 
         handlers.append(
-            ("/(.*)", HotaruLanding)
+            ("/(.*)", BeamLanding)
         )
         super().__init__(handlers)
 
@@ -50,14 +50,14 @@ class Hotaru(tornado.web.Application):
 ###          ###
 
 
-class HotaruLanding(tornado.web.RequestHandler):
+class BeamLanding(tornado.web.RequestHandler):
     def get(self, input):
         self.write(self.application.html.load("landingpage.html").generate())
 
 
-class HotaruInspector(tornado.web.RequestHandler):
+class BeamInspector(tornado.web.RequestHandler):
     """
-    Object for the optional Hotaru inspector.
+    Object for the optional Beam inspector.
     Currently lacks authentication, but it can be turned off.
     """
 
@@ -67,7 +67,7 @@ class HotaruInspector(tornado.web.RequestHandler):
         self.set_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
 
     def get(self, cmd):
-        logging.debug("Handling request HotaruInspector/" +
+        logging.debug("Handling request BeamInspector/" +
                       self.request.path)
 
         if not cmd.startswith("/"):
@@ -88,15 +88,15 @@ class HotaruInspector(tornado.web.RequestHandler):
                 self.write("Not found")
 
 
-class HotaruCommands(tornado.web.RequestHandler):
+class BeamCommands(tornado.web.RequestHandler):
     """
-    Object for the /hotaru endpoint.
+    Object for the /beam endpoint.
     This is where apps ask for new servers, delete them...
     """
 
     def prepare(self):
-        logging.debug("Handling request HotaruCommands/" + self.path_args[0])
-        if not self.path_args[0].startswith(HT_VERSION + "/"):
+        logging.debug("Handling request BeamCommands/" + self.path_args[0])
+        if not self.path_args[0].startswith(BEAM_VERSION + "/"):
             self.set_status(400)
             self.write({
                 "error": "version incompatible"
@@ -155,7 +155,7 @@ class HotaruCommands(tornado.web.RequestHandler):
                 self.set_status(404)
 
 
-class HotaruWebsocket(tornado.websocket.WebSocketHandler):
+class BeamWebsocket(tornado.websocket.WebSocketHandler):
     """
     Main object for the WebSocket endpoint itself.
     This is where actual communication happens.
@@ -185,9 +185,9 @@ class HotaruWebsocket(tornado.websocket.WebSocketHandler):
         return (server, player_name, player, su)
 
     def open(self, client):
-        logging.debug("Handling request HotaruWebsocket/" +
+        logging.debug("Handling request BeamWebsocket/" +
                       self.path_args[0])
-        if not self.path_args[0] == HT_VERSION:
+        if not self.path_args[0] == BEAM_VERSION:
             self.close(code=exceptions.BreakingApiChange())
 
         server, player_name, player, su = self.xtract_args()
@@ -326,7 +326,7 @@ class HotaruWebsocket(tornado.websocket.WebSocketHandler):
         actual_message = json.loads(" ".join(message.split(" ")[1:]))
 
         # player.name is a 1 only if it's sent by the server owner,
-        # see servers.py. This is for legacy reasons and how Hotaru was implemented
+        # see servers.py. This is for legacy reasons and how Beam was implemented
         # before the rewrite and open-sourcing.
         if message_command == "lock" and player.name == 1:
             server.lock = True

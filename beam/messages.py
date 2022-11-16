@@ -1,4 +1,4 @@
-from hotaru.players import Player
+from beam.players import Player
 
 """
 Holder classes for all message types we currently support.
@@ -8,7 +8,7 @@ Holder classes for all message types we currently support.
 class RawMessage:
     """
     Class for user-sent messages, these are always
-    from someone else, not Hotaru itself
+    from someone else, not Beam itself
     """
 
     def __init__(self, from_: Player, message_content):
@@ -91,7 +91,7 @@ class Su:
 class ShadowOfMessage:
     """
     This type of message is never sent directly, rather, it's a part
-    of a "repeat" packet. They are messages sent by a player to Hotaru.
+    of a "repeat" packet. They are messages sent by a player to Beam.
 
     Example usage would be in a chat app, where normal messages
     were sent by other players, and shadows were sent by you.

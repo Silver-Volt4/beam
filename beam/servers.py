@@ -1,6 +1,6 @@
 import logging
-from hotaru import exceptions, ratelimiting
-from hotaru.players import Player
+from beam import exceptions, ratelimiting
+from beam.players import Player
 import uuid
 import random
 import string

@@ -3,7 +3,7 @@ import tornado.ioloop
 import os
 import logging
 
-from hotaru import Hotaru
+from beam import Beam
 
 ENABLE_INSPECT = True
 
@@ -14,7 +14,7 @@ logging.basicConfig(
 
 
 def main():
-    app = Hotaru(
+    app = Beam(
         do_inspect=ENABLE_INSPECT,
         max_servers=int(os.environ.get("MAX_SERVERS","3")),
         max_users=int(os.environ.get("MAX_USERS","3"))
@@ -22,7 +22,7 @@ def main():
     port = os.environ.get("PORT")
     if not port:
         port = 8000
-    logging.info("Starting Hotaru on port {0}".format(port))
+    logging.info("Starting Beam on port {0}".format(port))
     app.listen(port)
     tornado.ioloop.IOLoop.current().start()
 
