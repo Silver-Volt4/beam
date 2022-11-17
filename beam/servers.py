@@ -1,7 +1,6 @@
 import logging
 from beam import exceptions, ratelimiting
-from beam.players import Player, PlayerPool
-import uuid
+from beam.players import Player, PlayerPool, Client
 import random
 import string
 import messages
@@ -11,18 +10,16 @@ Classes for the servers.
 """
 
 
-class Server(Player):
+class Server(Client):
     def __init__(self, code: str, limit: int):
+        super().__init__(None)
+
         self.code = code
-        self.token = str(uuid.uuid4())
-
-        self.p2pmode = False
-
-        self.client = None
 
         self.players = PlayerPool()
         self.lock = False
         self.limit = limit
+        self.p2pmode = False
 
         self.owner_ip = None
         self.rate_limit = ratelimiting.RoomJoinLimiting()

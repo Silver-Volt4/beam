@@ -1,6 +1,7 @@
 from typing import List
 from beam.players import Player
 
+
 def Message(from_: Player, data):
     """
     For user-sent messages, these are always
@@ -13,11 +14,13 @@ def Message(from_: Player, data):
         "data": data
     }
 
+
 def UsersList(users: List[Player]):
     return {
         "type": "users",
         "list": [u.name for u in users]
     }
+
 
 def UserJoin(user: Player):
     """
