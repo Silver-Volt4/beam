@@ -43,6 +43,14 @@ class Beam(tornado.web.Application):
             )
 
         super().__init__(handlers)
+    
+    def delete_server(self, server):
+        self.rate_limits.ip_deown(server.owner_ip)
+        server.close_server()
+        self.pool.free(server.code)
+        logging.info(f"Closed server: {server.code}")
+    
+
 
 ###          ###
 ### HANDLERS ###
@@ -138,10 +146,7 @@ class BeamCommands(tornado.web.RequestHandler):
                 self.get_argument("code"))
             if server:
                 if server.token == self.get_argument("token"):
-                    self.application.rate_limits.ip_deown(server.owner_ip)
-                    server.close_server()
-                    logging.info(f"Closed server: {server.code}")
-                    self.application.pool.free(server.code)
+                    self.application.delete_server(server)
                     self.set_status(200)
                 else:
                     self.set_status(401)
@@ -247,7 +252,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                     logging.debug("Reset strikes")
 
                 # Add player
-
+                self.server.active_connections += 1
                 p = Player(self.player_name, self)
                 self.player = p
                 self.server.add_user(p)
@@ -265,6 +270,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
             # The player name exists and the code is correct
             elif self.player.token == self.token:
+                self.server.active_connections += 1
                 try:
                     self.player.client.close(code=exceptions.Overridden())
                 except:
@@ -279,6 +285,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
             if self.server.token != self.token:
                 self.close(code=exceptions.SuAdminCodeMismatch())
             else:
+                self.server.active_connections += 1
                 try:
                     self.server.client.close(code=exceptions.Overridden())
                 except:
@@ -296,7 +303,13 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 self.server.write_message(
                     messages.UserDisconnected(self.player)
                 )
-        self.player.client = None
+        if self.player:
+            self.player.client = None
+        if self.server:
+            self.server.active_connections -= 1
+            if self.server.active_connections == 0:
+                self.application.delete_server(self.server)
+
 
     # Responsible for delivering messages
     def _send_message(self, data):

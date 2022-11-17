@@ -3,7 +3,7 @@ from beam import exceptions, ratelimiting
 from beam.players import Player, PlayerPool, Client
 import random
 import string
-import messages
+from beam import messages
 
 """
 Classes for the servers.
@@ -20,6 +20,7 @@ class Server(Client):
         self.lock = False
         self.limit = limit
         self.p2pmode = False
+        self.active_connections = 0
 
         self.owner_ip = None
         self.rate_limit = ratelimiting.RoomJoinLimiting()
