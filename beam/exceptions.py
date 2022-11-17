@@ -27,13 +27,13 @@ def NameDoesntExist():  # This one happens when you supply a token code in the l
     return BASE + 3
 
 
-def SuCodeMismatch():
-    logging.debug(f"exception: SuCodeMismatch")
+def TokenCodeMismatch():
+    logging.debug(f"exception: TokenCodeMismatch")
     return BASE + 4
 
 
-def SuAdminCodeMismatch():
-    logging.debug(f"exception: SuAdminCodeMismatch")
+def AdminTokenCodeMismatch():
+    logging.debug(f"exception: AdminTokenCodeMismatch")
     return BASE + 5
 
 

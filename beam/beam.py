@@ -43,13 +43,12 @@ class Beam(tornado.web.Application):
             )
 
         super().__init__(handlers)
-    
+
     def delete_server(self, server):
         self.rate_limits.ip_deown(server.owner_ip)
         server.close_server()
         self.pool.free(server.code)
         logging.info(f"Closed server: {server.code}")
-    
 
 
 ###          ###
@@ -164,27 +163,17 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
     def __init__(self, application, request, **kwargs) -> None:
         super().__init__(application, request, **kwargs)
-        self.server = None
+        self.code = None
         self.player_name = None
-        self.player = None
         self.token = None
 
+        self.server = None
+        self.player = None
+
     def parse_args(self):
-        code = self.get_argument("code")
-        player_name = self.get_argument("name", None)
-        token = self.get_argument("token", None)
-        server = self.application.pool.get_server_safe(code)
-
-        if server and player_name:
-            player = server.get_player_safe(player_name)
-
-        if token and not player_name:
-            player = server
-
-        self.server = server
-        self.player_name = player_name
-        self.player = player
-        self.token = token
+        self.code = self.get_argument("code")
+        self.player_name = self.get_argument("name", None)
+        self.token = self.get_argument("token", None)
 
     def check_origin(self, origin):
         # VERY UNSAFE. This should get a tweak as soon as possible!!!
@@ -203,10 +192,13 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         self.parse_args()
 
         # Check for errors in the connection and kick the client if necessary
-
-        if not self.server:
+        server = self.application.pool.get_server_safe(self.code)
+        if not server:
             self.close(code=exceptions.ServerCodeDoesntExist())
             return
+
+        self.server = server
+        player = self.server.get_player_safe(self.player_name)
 
         registering = self.player_name and not self.token
         logging_in = self.player_name and self.token
@@ -219,7 +211,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
             elif self.server.players.count() == self.server.limit:
                 self.close(code=exceptions.RoomLimitReached())
 
-            elif self.player:
+            elif player:
                 self.close(code=exceptions.NameIsTaken())
 
             elif self.player_name == "":
@@ -252,7 +244,6 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                     logging.debug("Reset strikes")
 
                 # Add player
-                self.server.active_connections += 1
                 p = Player(self.player_name, self)
                 self.player = p
                 self.server.add_user(p)
@@ -262,34 +253,34 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 )
 
         elif logging_in:
-            if not self.player:
+            if not player:
                 self.close(code=exceptions.NameDoesntExist())
 
-            elif self.player.token != self.token:
-                self.close(code=exceptions.SuCodeMismatch())
+            elif player.token != self.token:
+                self.close(code=exceptions.TokenCodeMismatch())
 
             # The player name exists and the code is correct
-            elif self.player.token == self.token:
-                self.server.active_connections += 1
+            elif player.token == self.token:
+                self.player = player
                 try:
                     self.player.client.close(code=exceptions.Overridden())
                 except:
                     pass
-                self.player.client = self
 
+                self.player.client = self
                 self.server.write_message(
                     messages.UserConnected(self.player)
                 )
 
         elif owner_connecting:
             if self.server.token != self.token:
-                self.close(code=exceptions.SuAdminCodeMismatch())
+                self.close(code=exceptions.AdminTokenCodeMismatch())
             else:
-                self.server.active_connections += 1
                 try:
                     self.server.client.close(code=exceptions.Overridden())
                 except:
                     pass
+                self.player = self.server
                 self.server.client = self
                 if self.server.players.count() > 0:
                     self.server.write_message(
@@ -298,20 +289,21 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
 
     # We notify the server owner about the disconnection
     def on_connection_close(self):
-        if self.close_code or 0 < BASE:
+        if (self.close_code or 0) < BASE:
             if self.server and isinstance(self.player, Player):
                 self.server.write_message(
                     messages.UserDisconnected(self.player)
                 )
         if self.player:
             self.player.client = None
-        if self.server:
-            self.server.active_connections -= 1
-            if self.server.active_connections == 0:
-                self.application.delete_server(self.server)
-
+            if isinstance(self.player, Player):
+                if self.server:
+                    self.server.active_connections -= 1
+                    if self.server.active_connections == 0:
+                        self.application.delete_server(self.server)
 
     # Responsible for delivering messages
+
     def _send_message(self, data):
         if data["to"] == 1:
             recipient = self.server
@@ -324,6 +316,11 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
             recipient,
             messages.Message(self.player, data["content"])
         )
+        if data["to"] == 2:
+            self.player.sends_message(
+                self.server,
+                messages.Message(self.player, data["content"])
+            )
 
     # Fires when a WS packet is received
     def on_message(self, message):

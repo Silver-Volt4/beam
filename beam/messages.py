@@ -2,7 +2,7 @@ from typing import List
 from beam.players import Player
 
 
-def Message(from_: Player, data):
+def Message(from_, data):
     """
     For user-sent messages, these are always
     from someone else, not Beam itself
@@ -10,7 +10,7 @@ def Message(from_: Player, data):
 
     return {
         "type": "msg",
-        "from": from_.name,
+        "from": (from_.name if isinstance(from_, Player) else 1),
         "data": data
     }
 
