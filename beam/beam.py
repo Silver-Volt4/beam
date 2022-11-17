@@ -251,6 +251,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 p.write_message(
                     messages.Token(p.token)
                 )
+                self.server.active_connections += 1
 
         elif logging_in:
             if not player:
@@ -267,6 +268,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 except:
                     pass
 
+                self.server.active_connections += 1
                 self.player.client = self
                 self.server.write_message(
                     messages.UserConnected(self.player)
@@ -282,6 +284,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                     pass
                 self.player = self.server
                 self.server.client = self
+                self.server.active_connections += 1
                 if self.server.players.count() > 0:
                     self.server.write_message(
                         messages.UsersList(self.server.players.list())
@@ -296,11 +299,10 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 )
         if self.player:
             self.player.client = None
-            if isinstance(self.player, Player):
-                if self.server:
-                    self.server.active_connections -= 1
-                    if self.server.active_connections == 0:
-                        self.application.delete_server(self.server)
+            if self.server:
+                self.server.active_connections -= 1
+                if self.server.active_connections == 0:
+                    self.application.delete_server(self.server)
 
     # Responsible for delivering messages
 
