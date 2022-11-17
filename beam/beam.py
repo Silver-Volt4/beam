@@ -42,19 +42,11 @@ class Beam(tornado.web.Application):
                 ("/inspect(.*)", BeamInspector)
             )
 
-        handlers.append(
-            ("/(.*)", BeamLanding)
-        )
         super().__init__(handlers)
 
 ###          ###
 ### HANDLERS ###
 ###          ###
-
-
-class BeamLanding(tornado.web.RequestHandler):
-    def get(self, input):
-        self.write(self.application.html.load("landingpage.html").generate())
 
 
 class BeamInspector(tornado.web.RequestHandler):
@@ -112,7 +104,7 @@ class BeamCommands(tornado.web.RequestHandler):
     def post(self, cmd):
         if self._status_code == 400:
             return
-        if cmd.endswith("createServer"):
+        if cmd.endswith("server"):
             if self.application.rate_limits.check_ip_owns(self.request.remote_ip) >= self.application.MAX_SERVERS:
                 self.write({
                     "error": "you have reached the limit of rooms for your IP address. please remove other servers first"
@@ -141,7 +133,7 @@ class BeamCommands(tornado.web.RequestHandler):
     def delete(self, cmd):
         if self._status_code == 400:
             return
-        if cmd.endswith("closeServer"):
+        if cmd.endswith("server"):
             server = self.application.pool.get_server_safe(
                 self.get_argument("code"))
             if server:
@@ -155,6 +147,8 @@ class BeamCommands(tornado.web.RequestHandler):
                     self.set_status(401)
             else:
                 self.set_status(404)
+        else:
+            self.set_status(404)
 
 
 class BeamWebsocket(tornado.websocket.WebSocketHandler):
@@ -261,9 +255,6 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 p.write_message(
                     messages.Token(p.token)
                 )
-                self.server.write_message(
-                    messages.UserJoin(p)
-                )
 
         elif logging_in:
             if not self.player:
@@ -305,6 +296,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 self.server.write_message(
                     messages.UserDisconnected(self.player)
                 )
+        self.player.client = None
 
     # Responsible for delivering messages
     def _send_message(self, data):
@@ -346,3 +338,11 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         # Unlock the instance; allow newcomers.
         if command == 36 and isinstance(self.player, Server):
             self.server.lock = False
+
+        # Enable p2p mode, broadcast other usernames
+        if command == 37 and isinstance(self.player, Server):
+            self.server.p2pmode = True
+
+        # Disable p2p mode
+        if command == 38 and isinstance(self.player, Server):
+            self.server.p2pmode = False

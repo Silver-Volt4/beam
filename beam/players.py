@@ -1,3 +1,4 @@
+from typing import List
 from beam import messages
 import uuid
 import json
@@ -49,7 +50,7 @@ class PlayerPool:
     def __contains__(self, what):
         return what in self.players
 
-    def list(self):
+    def list(self) -> List[Player]:
         return list(self.players.values())
 
     def count(self):

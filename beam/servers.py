@@ -4,6 +4,7 @@ from beam.players import Player, PlayerPool
 import uuid
 import random
 import string
+import messages
 
 """
 Classes for the servers.
@@ -14,6 +15,8 @@ class Server(Player):
     def __init__(self, code: str, limit: int):
         self.code = code
         self.token = str(uuid.uuid4())
+
+        self.p2pmode = False
 
         self.client = None
 
@@ -29,6 +32,11 @@ class Server(Player):
     # Add a Player to the PlayerPool
     def add_user(self, player: Player):
         if not player.name in self.players:
+            message = messages.UserJoin(player)
+            self.client.write_message(message)
+            if self.p2pmode:
+                for p in self.players.list():
+                    p.write_message(message)
             self.players[player.name] = player
             logging.debug(f"Server {self.code} adds new player {player}")
         else:
