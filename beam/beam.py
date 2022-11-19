@@ -1,3 +1,4 @@
+import asyncio
 import tornado.escape
 import tornado.template
 import tornado.web
@@ -49,6 +50,11 @@ class Beam(tornado.web.Application):
         server.close_server()
         self.pool.free(server.code)
         logging.info(f"Closed server: {server.code}")
+
+    async def delete_on_inactive(self, server):
+        logging.info(f"Waiting 90 seconds to close: {server.code}")
+        await asyncio.sleep(90)
+        self.delete_server(server)
 
 
 ###          ###
@@ -129,6 +135,7 @@ class BeamCommands(tornado.web.RequestHandler):
                 server.owner_ip = self.request.remote_ip
                 logging.info(f"Created new Server: {game_code}")
                 self.application.rate_limits.ip_own(server.owner_ip)
+                server.close_task = asyncio.create_task(self.application.delete_on_inactive(server))
                 self.set_status(201)
                 self.write({
                     "code": game_code[-4:],
@@ -188,6 +195,7 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                       self.path_args[0])
         if not self.path_args[0] == BEAM_VERSION:
             self.close(code=exceptions.BreakingApiChange())
+            return
 
         self.parse_args()
 
@@ -207,15 +215,19 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         if registering:
             if self.server.lock:
                 self.close(code=exceptions.ServerIsLocked())
+                return
 
             elif self.server.players.count() == self.server.limit:
                 self.close(code=exceptions.RoomLimitReached())
+                return
 
             elif player:
                 self.close(code=exceptions.NameIsTaken())
+                return
 
             elif self.player_name == "":
                 self.close(code=exceptions.NamePropertyIsEmpty())
+                return
 
             else:
                 # Check for spam and ban if necessary
@@ -247,29 +259,23 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 p = Player(self.player_name, self)
                 self.player = p
                 self.server.add_user(p)
-
                 p.write_message(
                     messages.Token(p.token)
                 )
-                self.server.active_connections += 1
 
         elif logging_in:
             if not player:
                 self.close(code=exceptions.NameDoesntExist())
+                return
 
             elif player.token != self.token:
                 self.close(code=exceptions.TokenCodeMismatch())
+                return
 
             # The player name exists and the code is correct
             elif player.token == self.token:
                 self.player = player
-                try:
-                    self.player.client.close(code=exceptions.Overridden())
-                except:
-                    pass
-
-                self.server.active_connections += 1
-                self.player.client = self
+                self.player.assign(self)
                 self.server.write_message(
                     messages.UserConnected(self.player)
                 )
@@ -277,18 +283,18 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
         elif owner_connecting:
             if self.server.token != self.token:
                 self.close(code=exceptions.AdminTokenCodeMismatch())
+                return
             else:
-                try:
-                    self.server.client.close(code=exceptions.Overridden())
-                except:
-                    pass
                 self.player = self.server
-                self.server.client = self
-                self.server.active_connections += 1
+                self.player.assign(self)
                 if self.server.players.count() > 0:
                     self.server.write_message(
                         messages.UsersList(self.server.players.list())
                     )
+        
+        self.server.active_connections += 1
+        if self.server.close_task:
+            self.server.close_task.cancel()
 
     # We notify the server owner about the disconnection
     def on_connection_close(self):
@@ -297,12 +303,10 @@ class BeamWebsocket(tornado.websocket.WebSocketHandler):
                 self.server.write_message(
                     messages.UserDisconnected(self.player)
                 )
-        if self.player:
-            self.player.client = None
-            if self.server:
-                self.server.active_connections -= 1
-                if self.server.active_connections == 0:
-                    self.application.delete_server(self.server)
+        if self.player and self.server:
+            self.server.active_connections -= 1
+            if self.server.active_connections == 0:
+                self.server.close_task = asyncio.create_task(self.application.delete_on_inactive(self.server))
 
     # Responsible for delivering messages
 

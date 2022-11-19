@@ -25,6 +25,8 @@ class Server(Client):
         self.owner_ip = None
         self.rate_limit = ratelimiting.RoomJoinLimiting()
 
+        self.close_task = None
+
         logging.debug(f"Initialized new Server instance: {self.code}")
 
     # Add a Player to the PlayerPool
